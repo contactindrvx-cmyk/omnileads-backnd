@@ -13,7 +13,7 @@ export default {
       try {
         const { prompt } = await request.json();
         
-        // 100% Gemini 3.1 Pro Latest
+        // Gemini 3.1 Pro Latest (No strict schema to avoid 500 crashes)
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-latest:generateContent?key=${env.GEMINI_API_KEY}`;
 
         const aiResponse = await fetch(apiUrl, {
@@ -21,29 +21,8 @@ export default {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            // یہ ہے وہ ماسٹر سٹریٹیجی جو اے آئی کو فالتو بات نہیں کرنے دے گی
             generationConfig: {
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: "OBJECT",
-                properties: {
-                  updatedFiles: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        name: { type: "STRING" },
-                        content: { type: "STRING" },
-                        language: { type: "STRING" },
-                        path: { type: "STRING" }
-                      },
-                      required: ["name", "content", "language"]
-                    }
-                  },
-                  summary: { type: "STRING" }
-                },
-                required: ["updatedFiles", "summary"]
-              }
+              responseMimeType: "application/json"
             }
           })
         });
@@ -63,7 +42,6 @@ export default {
       }
     }
     
-    return new Response("Mistri Backend 3.1 Pro (Strict Mode) Online", { headers: corsHeaders });
+    return new Response("Mistri Backend 3.1 Pro Online", { headers: corsHeaders });
   }
 };
-        
