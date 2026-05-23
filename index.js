@@ -31,19 +31,25 @@ export default {
       }), { status: 200, headers: CORS_HEADERS });
     }
 
-    // 3. لیڈز لانے والی مین لاجک
-    if (request.method !== "POST") {
+    // 3. GET اور POST دونوں چلیں گے
+    if (request.method !== "POST" && request.method !== "GET") {
       return new Response(
-        JSON.stringify({ error: "Only POST requests allowed for leads" }),
+        JSON.stringify({ error: "Method not allowed" }),
         { status: 405, headers: CORS_HEADERS }
       );
     }
 
     try {
-      const body = await request.json();
-      // فرنٹ اینڈ کبھی 'keyword' بھیجتا ہے اور کبھی 'query'، ہم نے دونوں کا حل رکھ دیا
-      const keyword = body.keyword || body.query; 
-      const userId = body.userId || "anonymous";
+      // GET میں URL params سے، POST میں body سے keyword لیں
+      let keyword, userId;
+      if (request.method === "GET") {
+        keyword = url.searchParams.get("keyword") || url.searchParams.get("query") || "";
+        userId  = url.searchParams.get("userId") || "anonymous";
+      } else {
+        const body = await request.json();
+        keyword = body.keyword || body.query || "";
+        userId  = body.userId  || "anonymous";
+      }
 
       if (!keyword || keyword.trim().length === 0) {
         return new Response(
