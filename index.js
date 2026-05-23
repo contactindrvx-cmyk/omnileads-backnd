@@ -4,30 +4,46 @@
  * AI: Vertex AI (Simple API Key — No OAuth, No Token)
  * Database: Cloudflare D1
  */
-
 const CORS_HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept"
 };
 
 export default {
   async fetch(request, env, ctx) {
+    const url = new URL(request.url);
 
+    // 1. CORS Preflight (براؤزر کی سکیورٹی کے لیے)
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: CORS_HEADERS });
     }
 
+    // 2. یوزر پروفائل کی ریکوئسٹ (تاکہ سیٹنگز میں ای میل اور نام شو ہو)
+    if (url.pathname.includes("/v1/me")) {
+      return new Response(JSON.stringify({
+        status: "success",
+        user: { 
+          email: "contact@omnicoresolutions.site", 
+          name: "OmniLeads User" 
+        }
+      }), { status: 200, headers: CORS_HEADERS });
+    }
+
+    // 3. لیڈز لانے والی مین لاجک
     if (request.method !== "POST") {
       return new Response(
-        JSON.stringify({ error: "Only POST requests allowed" }),
+        JSON.stringify({ error: "Only POST requests allowed for leads" }),
         { status: 405, headers: CORS_HEADERS }
       );
     }
 
     try {
-      const { keyword, userId } = await request.json();
+      const body = await request.json();
+      // فرنٹ اینڈ کبھی 'keyword' بھیجتا ہے اور کبھی 'query'، ہم نے دونوں کا حل رکھ دیا
+      const keyword = body.keyword || body.query; 
+      const userId = body.userId || "anonymous";
 
       if (!keyword || keyword.trim().length === 0) {
         return new Response(
@@ -45,7 +61,7 @@ export default {
       }
 
       const masterKeyword = cleanTerms.join(" ");
-
+      
       // =============================================
       // STEP 1: D1 Cache Check (12 Hours)
       // =============================================
