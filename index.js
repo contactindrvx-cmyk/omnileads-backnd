@@ -448,7 +448,7 @@ async function scrapeBing(keyword, env) {
 }
 
 /* =========================================================================
-   AI FILTER: Vertex AI — Simple API Key (No OAuth, No Token)
+   AI FILTER: Google Cloud Generative Language API (API Key Works Here)
    آپ کے Cloud Credits یہاں استعمال ہوں گے
 ========================================================================= */
 async function filterWithVertexAI(leads, keyword, env) {
@@ -467,18 +467,16 @@ Each object must have exactly these keys: "platform", "author", "text", "url", "
 
 Posts: ${JSON.stringify(sample)}`;
 
-  // ✅ Simple API Key طریقہ — بالکل آپ کے TARS AI کی طرح
-  const project  = env.VERTEX_PROJECT_ID || "tars-ai-chat-ann-assistant";
-  const location = env.VERTEX_LOCATION   || "us-central1";
-  const model    = "gemini-2.5-flash-lite";
-  const key      = env.VERTEX_API_KEY;
+  const model = "gemini-2.5-flash-lite";
+  const key   = env.VERTEX_API_KEY;
 
-  const vertexUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent?key=${key}`;
+  // ✅ یہ URL API Key قبول کرتا ہے + Google Cloud billing چلتی ہے
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
   try {
-    const res = await fetch(vertexUrl, {
+    const res = await fetch(apiUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" }, // کوئی Authorization نہیں
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{
           role: "user",
@@ -488,7 +486,7 @@ Posts: ${JSON.stringify(sample)}`;
     });
 
     if (!res.ok) {
-      console.error("Vertex Error:", await res.text());
+      console.error("Gemini Error:", await res.text());
       return sample.map(l => ({ ...l, score: 50 }));
     }
 
@@ -501,7 +499,7 @@ Posts: ${JSON.stringify(sample)}`;
       .sort((a, b) => b.score - a.score);
 
   } catch (e) {
-    console.error("Vertex filter failed:", e.message);
+    console.error("Gemini filter failed:", e.message);
     return sample.map(l => ({ ...l, score: 50 }));
   }
 }
