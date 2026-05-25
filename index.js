@@ -31,6 +31,53 @@ export default {
       }), { status: 200, headers: CORS_HEADERS });
     }
 
+        // =========================================================================
+    // 2.5 نیا روٹ: AI سے ریپلائی جنریٹ کروانے کے لیے (Frontend کے لیے)
+    // =========================================================================
+    if (url.pathname.includes("/v1/reply") && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const lead = body.lead;
+
+        const prompt = `You are an expert lead outreach specialist working for a freelance developer/agency.
+Write a highly personalized, short, and friendly outreach message to this potential client.
+DO NOT pitch any product, SaaS, or tool. Pitch human freelance services/skills.
+Keep it under 3 sentences. End with a low-pressure call to action (like a 10-min chat).
+
+Client Name/ID: ${lead.author}
+Keyword searched: ${lead.keyword}
+Job Post: ${lead.text}`;
+
+        const model = "gemini-2.5-flash-lite";
+        const projectId = env.VERTEX_PROJECT_ID;
+        const location = env.VERTEX_LOCATION;
+        const key = env.VERTEX_API_KEY;
+
+        const apiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:generateContent`;
+
+        const aiRes = await fetch(apiUrl, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": key 
+          },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }]
+          })
+        });
+
+        const data = await aiRes.json();
+        const aiReply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Hey! I saw your post and I have extensive experience in this area. I would love to help out. Let's chat!";
+
+        return new Response(JSON.stringify({ reply: aiReply }), { status: 200, headers: CORS_HEADERS });
+
+      } catch (error) {
+        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+
+    
     // 3. GET اور POST دونوں چلیں گے
     if (request.method !== "POST" && request.method !== "GET") {
       return new Response(
