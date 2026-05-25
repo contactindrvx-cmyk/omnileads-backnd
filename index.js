@@ -525,22 +525,33 @@ Posts: ${JSON.stringify(sample)}`;
 
 
 
-
 /* =========================================================================
-   UTILITY: Keyword Cleaner
+   UTILITY: Smart Keyword Extractor (Dumb-Proof Logic)
 ========================================================================= */
 function getSearchTerms(rawKeyword) {
-  const stopWords = new Set([
-    'for', 'the', 'in', 'a', 'an', 'looking',
-    'need', 'want', 'to', 'hire', 'please', 'help',
-    'i', 'me', 'my', 'we', 'our', 'us', 'and', 'or'
-    // ✅ 'developer' اور 'designer' نہیں ہیں — یہ ضروری keywords ہیں
-  ]);
+  let cleanText = rawKeyword.toLowerCase();
+  
+  // یہ وہ فالتو الفاظ ہیں جو ناسمجھ یوزرز اکثر ٹائپ کرتے ہیں
+  const garbageWords = [
+    "i am a", "i am", "im", "looking for a", "looking for", "looking",
+    "need a", "need", "want to", "want", "hire me", "hire",
+    "someone who can", "someone to", "someone", "can anyone",
+    "help me", "help", "find a", "find", "job", "jobs", "work",
+    "freelance", "freelancer", "freelancing", "client", "clients",
+    "project", "projects", "for my", "my", "me", "i", "we", "our",
+    "us", "please", "recommend", "any", "good", "best", "cheap",
+    "affordable", "expert", "specialist", "the", "in", "for", "a", "an", "to"
+  ];
 
-  return rawKeyword
-    .toLowerCase()
+  // فالتو الفاظ کو ایک ایک کر کے جملے سے اڑا دو (صرف پورے الفاظ، آدھے نہیں)
+  garbageWords.forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    cleanText = cleanText.replace(regex, " ");
+  });
+
+  // سپیشل کریکٹرز ہٹا کر صاف الفاظ کی لسٹ بنا لو
+  return cleanText
     .replace(/[^a-z0-9\s]/g, "")
     .split(/\s+/)
-    .filter(w => w.length > 1 && !stopWords.has(w))
-    .sort();
-                      }
+    .filter(w => w.length > 1);
+}
