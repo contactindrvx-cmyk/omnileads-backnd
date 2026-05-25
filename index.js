@@ -11,6 +11,8 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept"
 };
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -257,58 +259,52 @@ async function scrapeReddit(keyword) {
 }
 
 /* =========================================================================
-   SOURCE 2: Hacker News
+   SOURCE 2: Hacker News (Strict 7 days timestamp filter added)
 ========================================================================= */
 async function scrapeHackerNews(keyword) {
   const leads = [];
   try {
-    const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(keyword)}&tags=job&hitsPerPage=10`;
+    const sevenDaysAgoSeconds = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
+    const url = `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(keyword)}&tags=job&numericFilters=created_at_i>${sevenDaysAgoSeconds}&hitsPerPage=10`;
     const res = await fetch(url);
     if (!res.ok) return leads;
     const data = await res.json();
     data?.hits?.forEach(h => {
       leads.push({
-        platform: "HackerNews",
-        author: h.author || "Company",
+        platform: "HackerNews", author: h.author || "Company",
         text: (h.title + " " + (h.story_text || "")).substring(0, 400),
         url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`
       });
     });
-  } catch (e) {
-    console.error("HN:", e.message);
-  }
+  } catch (e) {}
   return leads.slice(0, 8);
 }
 
 /* =========================================================================
-   SOURCE 3: RemoteOK (Fixed — Tag-based search)
+   SOURCE 3: RemoteOK
 ========================================================================= */
 async function scrapeRemoteOK(keyword) {
   const leads = [];
   try {
-    // پہلا keyword بطور tag استعمال کریں
     const tag = keyword.split(" ")[0];
-    const res = await fetch(`https://remoteok.com/api?tag=${encodeURIComponent(tag)}`, {
-      headers: { "User-Agent": "OmniLeads/4.1" }
-    });
+    const res = await fetch(`https://remoteok.com/api?tag=${encodeURIComponent(tag)}`, { headers: { "User-Agent": "OmniLeads/4.1" } });
     if (!res.ok) return leads;
     const data = await res.json();
-    // پہلی entry metadata ہوتی ہے، اسے skip کریں
     const jobs = Array.isArray(data) ? data.slice(1) : [];
+    
+    const cutoff = Date.now() - SEVEN_DAYS_MS;
     jobs.slice(0, 6).forEach(job => {
       if (!job.position) return;
+      if (job.date && new Date(job.date).getTime() < cutoff) return; // 7 دن پرانا ہٹا دو
       leads.push({
         platform: "RemoteOK", author: job.company || "Unknown",
         text: (job.position + " — " + (job.description || "").replace(/<[^>]*>/gm, "")).substring(0, 400),
         url: job.url || ""
       });
     });
-  } catch (e) {
-    console.error("RemoteOK:", e.message);
-  }
+  } catch (e) {}
   return leads;
 }
-
 
 /* =========================================================================
    SOURCE 4: Remotive
@@ -316,88 +312,75 @@ async function scrapeRemoteOK(keyword) {
 async function scrapeRemotive(keyword) {
   const leads = [];
   try {
-    const url = `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(keyword)}&limit=6`;
+    const url = `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(keyword)}&limit=10`;
     const res = await fetch(url);
     if (!res.ok) return leads;
     const data = await res.json();
-    data?.jobs?.slice(0, 6).forEach(job => {
+    
+    const cutoff = Date.now() - SEVEN_DAYS_MS;
+    data?.jobs?.forEach(job => {
+      if (job.publication_date && new Date(job.publication_date).getTime() < cutoff) return; // 7 دن پرانا ہٹا دو
       leads.push({
-        platform: "Remotive",
-        author: job.company_name || "Unknown",
-        text: (job.title + " — " + (job.description || "")
-          .replace(/<[^>]*>/gm, "")).substring(0, 400),
+        platform: "Remotive", author: job.company_name || "Unknown",
+        text: (job.title + " — " + (job.description || "").replace(/<[^>]*>/gm, "")).substring(0, 400),
         url: job.url || ""
       });
     });
-  } catch (e) {
-    console.error("Remotive:", e.message);
-  }
-  return leads;
+  } catch (e) {}
+  return leads.slice(0, 6);
 }
 
 /* =========================================================================
-   SOURCE 5: WeWorkRemotely (RSS)
+   SOURCE 5: WeWorkRemotely
 ========================================================================= */
 async function scrapeWeWorkRemotely(keyword) {
   const leads = [];
   try {
-    const res = await fetch(`https://weworkremotely.com/remote-jobs.rss`, {
-      headers: { "User-Agent": "OmniLeads/4.0" }
-    });
+    const res = await fetch(`https://weworkremotely.com/remote-jobs.rss`, { headers: { "User-Agent": "OmniLeads/4.0" } });
     if (!res.ok) return leads;
     const text = await res.text();
     const items = text.match(/<item>[\s\S]*?<\/item>/g) || [];
     for (const item of items) {
-      const titleMatch =
-        item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) ||
-        item.match(/<title>(.*?)<\/title>/);
+      const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) || item.match(/<title>(.*?)<\/title>/);
       const linkMatch = item.match(/<link>(.*?)<\/link>/);
-      if (
-        titleMatch &&
-        titleMatch[1].toLowerCase().includes(keyword.toLowerCase())
-      ) {
+      
+      if (titleMatch && titleMatch[1].toLowerCase().includes(keyword.toLowerCase())) {
         leads.push({
-          platform: "WeWorkRemotely",
-          author: "WWR",
-          text: titleMatch[1],
-          url: linkMatch ? linkMatch[1] : "https://weworkremotely.com"
+          platform: "WeWorkRemotely", author: "WWR",
+          text: titleMatch[1], url: linkMatch ? linkMatch[1] : "https://weworkremotely.com"
         });
       }
     }
-  } catch (e) {
-    console.error("WWR:", e.message);
-  }
+  } catch (e) {}
   return leads.slice(0, 5);
 }
 
 /* =========================================================================
-   SOURCE 6: Dev.to (نیا — فری API)
+   SOURCE 6: Dev.to
 ========================================================================= */
 async function scrapeDevTo(keyword) {
   const leads = [];
   try {
-    const res = await fetch(
-      `https://dev.to/api/articles?tag=hiring&per_page=10`,
-      { headers: { "User-Agent": "OmniLeads/4.1" } }
-    );
+    const res = await fetch(`https://dev.to/api/articles?tag=hiring&per_page=10`, { headers: { "User-Agent": "OmniLeads/4.1" } });
     if (!res.ok) return leads;
     const data = await res.json();
-    data
-      .filter(a => a.title.toLowerCase().includes(keyword.toLowerCase()) || (a.description || "").toLowerCase().includes(keyword.toLowerCase()))
-      .slice(0, 5)
-      .forEach(a => leads.push({
-        platform: "Dev.to", author: a.user?.name || "Unknown",
-        text: (a.title + " " + (a.description || "")).substring(0, 400),
-        url: a.url || `https://dev.to${a.path}`
-      }));
+    
+    const cutoff = Date.now() - SEVEN_DAYS_MS;
+    data.filter(a => a.title.toLowerCase().includes(keyword.toLowerCase()) || (a.description || "").toLowerCase().includes(keyword.toLowerCase()))
+      .forEach(a => {
+        if (a.published_at && new Date(a.published_at).getTime() < cutoff) return; // 7 دن پرانا ہٹا دو
+        leads.push({
+          platform: "Dev.to", author: a.user?.name || "Unknown",
+          text: (a.title + " " + (a.description || "")).substring(0, 400),
+          url: a.url || `https://dev.to${a.path}`
+        });
+      });
   } catch (e) {}
-  return leads;
-    }
-
+  return leads.slice(0, 5);
+}
 
 /* =========================================================================
-   SOURCE 7: Google CSE (UNLOCKED VERSION - For Paid Billing)
-   LinkedIn + X + Quora + Indie Hackers + ProductHunt + Facebook
+   SOURCE 7: Google CSE (FIXED: dateRestrict=w added)
 ========================================================================= */
 async function scrapeGoogleCSE(keyword, env) {
   let leads = [];
@@ -412,11 +395,10 @@ async function scrapeGoogleCSE(keyword, env) {
     `site:producthunt.com/discussions "${keyword}" "looking for" OR "need"`
   ];
 
-  // سب کو ایک ساتھ فائر کرو (Parallel Execution) بجلی کی سپیڈ کے لیے
   const fetchPromises = dorks.map(async (query) => {
     try {
-      // 🚨 بریک ہٹا دی گئی ہے: اب num=10 (Maximum) استعمال ہو رہا ہے
-      const url = `https://www.googleapis.com/customsearch/v1?key=${env.GOOGLE_CSE_KEY}&cx=${env.GOOGLE_CSE_ID}&q=${encodeURIComponent(query)}&num=10`;
+      // ✅ dateRestrict=w لگا دیا گیا ہے تاکہ صرف پچھلے 7 دن کا ڈیٹا آئے
+      const url = `https://www.googleapis.com/customsearch/v1?key=${env.GOOGLE_CSE_KEY}&cx=${env.GOOGLE_CSE_ID}&q=${encodeURIComponent(query)}&dateRestrict=w&num=10`;
       const res = await fetch(url);
       if (!res.ok) return [];
       
@@ -434,65 +416,49 @@ async function scrapeGoogleCSE(keyword, env) {
           item.link.includes("producthunt")   ? "ProductHunt"   : "Web";
           
         localLeads.push({
-          platform, 
-          author: item.displayLink || "unknown",
+          platform, author: item.displayLink || "unknown",
           text: (item.title + " " + (item.snippet || "")).substring(0, 400),
           url: item.link
         });
       });
       return localLeads;
-    } catch (e) {
-      console.error("CSE unlocked dork failed:", e.message);
-      return [];
-    }
+    } catch (e) { return []; }
   });
 
-  // سارے رزلٹس کا انتظار کرو اور ایک ہی ارے (Array) میں جوڑ دو
   const allResults = await Promise.all(fetchPromises);
-  allResults.forEach(resArray => {
-    leads = [...leads, ...resArray];
-  });
-
+  allResults.forEach(resArray => { leads = [...leads, ...resArray]; });
   return leads;
-                 }
-
-
+}
 
 /* =========================================================================
-   SOURCE 7: Bing Search (Backup)
+   SOURCE 8: Bing Search (FIXED: freshness=Week added)
 ========================================================================= */
 async function scrapeBing(keyword, env) {
   const leads = [];
   const queries = [
-    `${keyword} "looking to hire" OR "need a" OR "we are hiring"`,
+    `${keyword} "looking to hire" OR "need a"`,
     `site:linkedin.com "${keyword}" hiring`,
     `site:facebook.com "${keyword}" "looking for"`
   ];
   for (const query of queries) {
     try {
-      const url = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(query)}&count=4`;
-      const res = await fetch(url, {
-        headers: { "Ocp-Apim-Subscription-Key": env.BING_API_KEY }
-      });
+      // ✅ freshness=Week لگا دیا گیا ہے
+      const url = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(query)}&freshness=Week&count=4`;
+      const res = await fetch(url, { headers: { "Ocp-Apim-Subscription-Key": env.BING_API_KEY } });
       if (!res.ok) continue;
       const data = await res.json();
       data?.webPages?.value?.forEach(item => {
-        const platform =
-          item.url.includes("linkedin") ? "LinkedIn" :
-          item.url.includes("facebook") ? "Facebook" : "Bing Web";
+        const platform = item.url.includes("linkedin") ? "LinkedIn" : item.url.includes("facebook") ? "Facebook" : "Bing Web";
         leads.push({
-          platform,
-          author: item.displayUrl || "unknown",
-          text: (item.name + " " + item.snippet).substring(0, 400),
-          url: item.url
+          platform, author: item.displayUrl || "unknown",
+          text: (item.name + " " + item.snippet).substring(0, 400), url: item.url
         });
       });
-    } catch (e) {
-      console.error("Bing:", e.message);
-    }
+    } catch (e) {}
   }
   return leads;
-}
+    }
+                                               
 
 /* =========================================================================
    AI FILTER: Google Cloud Vertex AI (Uses your Cloud Credits)
