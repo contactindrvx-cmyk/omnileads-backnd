@@ -454,7 +454,8 @@ async function scrapeBing(keyword, env) {
 async function filterWithVertexAI(leads, keyword, env) {
   if (!leads || leads.length === 0) return [];
 
-  const sample = leads.slice(0, 20);
+  // تبدیلی 1: 20 کی لمٹ کو ختم کر کے 50 کر دیا گیا ہے تاکہ زیادہ لیڈز چھانی جا سکیں
+  const sample = leads.slice(0, 50);
   const prompt = `You are an expert Lead Qualifier for freelancers and agencies.
 Analyze these posts and find GENUINE clients looking to HIRE someone for "${keyword}".
 Scoring:
@@ -470,7 +471,6 @@ Posts: ${JSON.stringify(sample)}`;
   const model = "gemini-2.5-flash-lite";
   const key   = env.VERTEX_API_KEY;
 
-  // ✅ یہ URL API Key قبول کرتا ہے + Google Cloud billing چلتی ہے
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
   try {
@@ -487,7 +487,8 @@ Posts: ${JSON.stringify(sample)}`;
 
     if (!res.ok) {
       console.error("Gemini Error:", await res.text());
-      return sample.map(l => ({ ...l, score: 50 }));
+      // تبدیلی 2: اگر AI کی طرف سے کوئی ایرر آئے گا تو یہ فالتو لیڈز کو ریجیکٹ کر دے گا
+      return []; 
     }
 
     const data   = await res.json();
@@ -500,9 +501,11 @@ Posts: ${JSON.stringify(sample)}`;
 
   } catch (e) {
     console.error("Gemini filter failed:", e.message);
-    return sample.map(l => ({ ...l, score: 50 }));
+    // تبدیلی 3: کیچ بلاک میں بھی فالتو ڈیٹا کو پاس ہونے سے روک دیا گیا ہے
+    return []; 
   }
 }
+
 
 /* =========================================================================
    UTILITY: Keyword Cleaner
