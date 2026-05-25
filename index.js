@@ -503,17 +503,18 @@ async function filterWithVertexAI(leads, keyword, env) {
   const sample = leads.slice(0, 50);
   const prompt = `You are an expert Lead Qualifier for freelancers and agencies.
 Analyze these posts and find GENUINE clients looking to HIRE someone for "${keyword}".
-Scoring:
-- 90-100: Definite hiring post, client is looking to pay someone
-- 70-89:  Very likely hiring, clear intent
-- 0-69:   Spam, self-promotion, job seekers posting CVs
+
+STRICT RULES:
+- If the author is posting their own CV, portfolio, or asking for a job -> SCORE MUST BE 0.
+- If it's a promotional blog post, tutorial, or SaaS tool pitch -> SCORE MUST BE 0.
+- If the author is asking a question, seeking advice, or discussing a problem related to the keyword (warm lead) -> SCORE 50-69.
+- If the author is explicitly looking to hire, pay, or find an expert -> SCORE 70-100.
 
 Return ONLY a valid JSON array. No markdown, no extra text.
 Each object must have exactly these keys: "platform", "author", "text", "url", "score"
 
 Posts: ${JSON.stringify(sample)}`;
 
-  // ✅ ماڈل واپس وہی کر دیا گیا ہے جو آپ نے اوریجنل کوڈ میں رکھا تھا
   const model = "gemini-2.5-flash-lite"; 
   const projectId = env.VERTEX_PROJECT_ID; 
   const location = env.VERTEX_LOCATION; 
@@ -526,7 +527,7 @@ Posts: ${JSON.stringify(sample)}`;
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": key // Vertex AI کے لیے API Key ہیڈر
+        "X-Goog-Api-Key": key
       },
       body: JSON.stringify({
         contents: [{
@@ -545,15 +546,17 @@ Posts: ${JSON.stringify(sample)}`;
     const text   = data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
     const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
 
+    // یہاں 70 کی جگہ 50 کر دیا گیا ہے تاکہ 'وارم لیڈز' بھی پاس ہو سکیں
     return parsed
-      .filter(l => l.score >= 70)
+      .filter(l => l.score >= 50)
       .sort((a, b) => b.score - a.score);
 
   } catch (e) {
     console.error("Vertex AI filter failed:", e.message);
     return []; 
   }
-                   }
+}
+
 
 
 
