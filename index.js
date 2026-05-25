@@ -448,13 +448,11 @@ async function scrapeBing(keyword, env) {
 }
 
 /* =========================================================================
-   AI FILTER: Google Cloud Generative Language API (API Key Works Here)
-   آپ کے Cloud Credits یہاں استعمال ہوں گے
+   AI FILTER: Google Cloud Vertex AI (Uses your Cloud Credits)
 ========================================================================= */
 async function filterWithVertexAI(leads, keyword, env) {
   if (!leads || leads.length === 0) return [];
 
-  // تبدیلی 1: 20 کی لمٹ کو ختم کر کے 50 کر دیا گیا ہے تاکہ زیادہ لیڈز چھانی جا سکیں
   const sample = leads.slice(0, 50);
   const prompt = `You are an expert Lead Qualifier for freelancers and agencies.
 Analyze these posts and find GENUINE clients looking to HIRE someone for "${keyword}".
@@ -468,15 +466,21 @@ Each object must have exactly these keys: "platform", "author", "text", "url", "
 
 Posts: ${JSON.stringify(sample)}`;
 
-  const model = "gemini-2.5-flash-lite";
-  const key   = env.VERTEX_API_KEY;
+  // ✅ ماڈل واپس وہی کر دیا گیا ہے جو آپ نے اوریجنل کوڈ میں رکھا تھا
+  const model = "gemini-2.5-flash-lite"; 
+  const projectId = env.VERTEX_PROJECT_ID; 
+  const location = env.VERTEX_LOCATION; 
+  const key = env.VERTEX_API_KEY;
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const apiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:generateContent`;
 
   try {
     const res = await fetch(apiUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key // Vertex AI کے لیے API Key ہیڈر
+      },
       body: JSON.stringify({
         contents: [{
           role: "user",
@@ -486,8 +490,7 @@ Posts: ${JSON.stringify(sample)}`;
     });
 
     if (!res.ok) {
-      console.error("Gemini Error:", await res.text());
-      // تبدیلی 2: اگر AI کی طرف سے کوئی ایرر آئے گا تو یہ فالتو لیڈز کو ریجیکٹ کر دے گا
+      console.error("Vertex AI Error:", await res.text());
       return []; 
     }
 
@@ -500,11 +503,11 @@ Posts: ${JSON.stringify(sample)}`;
       .sort((a, b) => b.score - a.score);
 
   } catch (e) {
-    console.error("Gemini filter failed:", e.message);
-    // تبدیلی 3: کیچ بلاک میں بھی فالتو ڈیٹا کو پاس ہونے سے روک دیا گیا ہے
+    console.error("Vertex AI filter failed:", e.message);
     return []; 
   }
-}
+                   }
+
 
 
 /* =========================================================================
