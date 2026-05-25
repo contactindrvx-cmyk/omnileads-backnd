@@ -157,12 +157,25 @@ Job Post: ${lead.text}`;
         scrapeGoogleCSE(masterKeyword, env)
       ]);
 
-      let allLeads = [];
+            let allLeads = [];
       results.forEach(res => {
         if (res.status === "fulfilled" && Array.isArray(res.value)) {
           allLeads = [...allLeads, ...res.value];
         }
       });
+
+      // ✅ 1. ڈپلیکیٹ فلٹر: ایک جیسے لنک والی لیڈز اڑا دو
+      allLeads = Array.from(new Map(allLeads.map(l => [l.url, l])).values());
+      
+      // 🚀 2. کچرا فلٹر: جو لوگ خود نوکری مانگ رہے ہیں انہیں راستے میں ہی مار دو
+      allLeads = allLeads.filter(lead => {
+        const textToCheck = lead.text.toLowerCase();
+        return !textToCheck.includes("[for hire]") && 
+               !textToCheck.includes("for hire") && 
+               !textToCheck.includes("hire me");
+      });
+
+    
 
       // Bing Backup — اگر leads کم ہوں اور key موجود ہو
       if (allLeads.length < 5 && env.BING_API_KEY) {
